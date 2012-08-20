@@ -410,6 +410,25 @@ create_slices()
     echo "${slices}"
 }
 
+copy_smartos()
+{
+    dlopt=$1
+    ftype=$2
+    [[ $ftype == "pcfs" ]] && fext=":c"
+    target=$3
+
+    for disk in `disklist $dlopt`; do
+        mount -F $ftype -r /dev/dsk/${disk}p0$fext /mnt 2>/dev/null || continue
+        if [ -f /mnt/platform/i86pc/amd64/boot_archive ]; then
+            cp -rp /mnt/platform ${target}/smartos/
+            cp -rp /mnt/boot ${target}/
+            umount /mnt
+            break
+        fi
+        umount /mnt
+    done
+}
+
 install_smartos()
 {
     disks=$1
@@ -417,11 +436,16 @@ install_smartos()
     printf "%-56s" "Installing SmartOS to disk... "
     zfs create ${SYS_ZPOOL}/smartos
 
-    CDROM=$(cfgadm | awk '/cd\/dvd/ {print $1}' | cut -d: -f3- | head -1)
-    mount -F hsfs -r /dev/${CDROM}p0 /mnt
-    cp -rp /mnt/platform /${SYS_ZPOOL}/smartos/
-    cp -rp /mnt/boot /${SYS_ZPOOL}/
-    umount /mnt
+    if [[ ${CONFIG_disk_install} == "cd" ]]; then
+        copy_smartos -r hsfs /${SYS_ZPOOL}
+
+    elif [[ ${CONFIG_disk_install} == "usb" ]]; then
+        copy_smartos -r pcfs /${SYS_ZPOOL}
+
+    elif [[ ${CONFIG_disk_install} == "fs" ]]; then
+        cp -rp /tmp/smartos/platform /${SYS_ZPOOL}/smartos/
+        cp -rp /tmp/boot /${SYS_ZPOOL}/
+    fi
 
     cd /${SYS_ZPOOL}/boot/grub
 
@@ -435,6 +459,9 @@ install_smartos()
                  /title/ {print \"   bootfs ${SYS_ZPOOL}/smartos\"}" \
             > menu.tmp && mv menu.tmp menu.lst
     fi
+
+    find /${SYS_ZPOOL}/{boot,smartos} -type d -exec chmod 755 {} \;
+    find /${SYS_ZPOOL}/{boot,smartos} -type f -exec chmod 640 {} \;
 
     for disk in ${disks}; do
         installgrub stage1 stage2 /dev/rdsk/${disk}s0 >/dev/null
@@ -505,6 +532,11 @@ create_zpool()
 create_zpools()
 {
   devs=$1
+
+  if [[ ${CONFIG_disk_install} == "fs" ]]; then
+      mkdir /tmp/smartos
+      copy_smartos -n pcfs /tmp
+  fi
 
   export SYS_ZPOOL="zones"
   create_zpool "$devs"
