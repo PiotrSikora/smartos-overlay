@@ -99,6 +99,9 @@ if [ $? -ne 0 ]; then
   if [[ -n $(/bin/bootparams | grep '^smartos=true') ]]; then
     mount -F lofs /usbkey/shadow /etc/shadow
     mount -F lofs /usbkey/ssh /etc/ssh
+    if [[ -d /usbkey/ipf ]]; then
+      mount -F lofs /usbkey/ipf /etc/ipf
+    fi
   fi
 
   swap -a /dev/zvol/dsk/${SYS_ZPOOL}/swap
